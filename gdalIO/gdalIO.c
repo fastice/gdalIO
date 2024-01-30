@@ -1,6 +1,13 @@
 #include "gdalIO/gdalIO/grimpgdal.h"
 #include "mosaicSource/common/common.h"
+#include <libgen.h>
 
+#define STR_BUFFER_SIZE 1024
+#define STR_BUFF(fmt, ...) ({                                    \
+    char *__buf = (char *)calloc(STR_BUFFER_SIZE, sizeof(char)); \
+    snprintf(__buf, STR_BUFFER_SIZE, fmt, ##__VA_ARGS__);        \
+    __buf;                                                       \
+})
 
 
 void *allocData(int data_type, int width, int height)
@@ -87,30 +94,35 @@ char *checkForVrt(char *filename, char *vrtBuff)
 }
 
 void writeSingleVRT(int32_t nR, int32_t nA, dictNode *metaData, char *vrtFile, char *bandFiles[], char *bandNames[],
-                    int dataTypes[], char *byteSwapOption, int32_t nBands)
+                    GDALDataType dataTypes[], char *byteSwapOption, int32_t nBands)
 {
-    GDALDriverH vrtDriver = GDALGetDriverByName("VRT");
     GDALRasterBandH hBand;
     char fileOption[2048];
+    char fullPath[2048];
     double geoTransform[6] = {-0.5, 1., 0., -0.5, 0., 1.};
-    int i;
-
-    fprintf(stderr, "Opening %s\n", vrtFile);
+    int i, j;
+    fileOption[i] = '\0';
+    GDALDriverH vrtDriver = GDALGetDriverByName("VRT");
     GDALDatasetH vrtDataset = GDALCreate(vrtDriver, vrtFile, nR, nA, 0, GDT_Unknown, NULL);
     // Add the meta data                                
     writeDataSetMetaData(vrtDataset, metaData);
     // Add geo transform
     GDALSetGeoTransform(vrtDataset, geoTransform);
-    // Setup options
-    
-    char *options[] = {fileOption, "relativeToVRT=1", "subclass=VRTRawRasterBand", byteSwapOption, NULL};
-    // Add bands
+    // Loop through bands
     for (i = 0; i < nBands; i++)
     {
-        sprintf(fileOption, "SourceFilename=%s", bandFiles[i]); 
+        // Make a copy of the full bath so basename doesn't screw it up.
+        strcpy(fullPath, bandFiles[i]);
+        // Set SourceFilename (strip of dull path since its relative to VRT)
+        sprintf(fileOption, "SourceFilename=%s", basename(fullPath));
+        // Setup options
+        char *options[] = {fileOption, "relativeToVRT=1", "subclass=VRTRawRasterBand", byteSwapOption, NULL};
+        // Add the next band and set its options;
         GDALAddBand(vrtDataset, dataTypes[i], options);
+        // Get the band handle
         hBand = GDALGetRasterBand(vrtDataset, i + 1);
-        GDALSetMetadataItem(hBand, "Description", bandNames[i], NULL);
+        // Add a band description
+        GDALSetMetadataItem(hBand, "Description", (const char *) bandNames[i], NULL);
     }
     GDALClose(vrtDataset);
 }
