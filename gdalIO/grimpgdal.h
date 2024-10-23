@@ -5,7 +5,7 @@
 #include <stdint.h>
 #include <string.h>
 
-
+#define DONOTINCLUDENODATA 1e30
 typedef struct dictNode {
     char *key;
     char *value;
@@ -27,7 +27,7 @@ int writeDataSetMetaData(GDALDatasetH dataSet, dictNode *metaData);
 
 int readDataSetMetaData(GDALDatasetH dataSet, dictNode **metaDict);
 void writeSingleVRT(int32_t nR, int32_t nA, dictNode *metaData, char *vrtFile, char *bandFiles[], char *bandNames[],
-                    GDALDataType dataTypes[], char *byteSwapOption, int32_t nBands);
+                    GDALDataType dataTypes[], char *byteSwapOption, double noDataValue, int32_t nBands);
 int makeVRT(char *vrtFile, int xSize, int ySize, int dataType, char **bandNames, int nBands,
             double *geoTransform, int byteSwap, dictNode *metaData);
 char *checkForVrt(char *filename, char *vrtBuff);

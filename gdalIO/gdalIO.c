@@ -3,12 +3,11 @@
 #include <libgen.h>
 
 #define STR_BUFFER_SIZE 1024
-#define STR_BUFF(fmt, ...) ({                                    \
-    char *__buf = (char *)calloc(STR_BUFFER_SIZE, sizeof(char)); \
-    snprintf(__buf, STR_BUFFER_SIZE, fmt, ##__VA_ARGS__);        \
-    __buf;                                                       \
+#define STR_BUFF(fmt, ...) ({                                  \
+  char *__buf = (char *)calloc(STR_BUFFER_SIZE, sizeof(char)); \
+  snprintf(__buf, STR_BUFFER_SIZE, fmt, ##__VA_ARGS__);        \
+  __buf;                                                       \
 })
-
 
 void *allocData(int data_type, int width, int height)
 {
@@ -53,7 +52,7 @@ int readDataSetMetaData(GDALDatasetH dataSet, dictNode **metaDictionary)
 {
   int i;
   char *key, *value;
-  //GDALRasterBandH hBand = GDALGetRasterBand(dataSet, band);
+  // GDALRasterBandH hBand = GDALGetRasterBand(dataSet, band);
   char **metadata = GDALGetMetadata(dataSet, NULL);
   for (i = 0; metadata[i] != NULL; i++)
   {
@@ -84,49 +83,50 @@ char *extract_filename(char *path)
 
 char *checkForVrt(char *filename, char *vrtBuff)
 {
-	char *vrtFile;
-	vrtFile = appendSuffix(filename, ".vrt", vrtBuff);
-	if (access(vrtFile, F_OK) == 0)
-	{
-		return vrtFile;
-	}
-	return NULL;
+  char *vrtFile;
+  vrtFile = appendSuffix(filename, ".vrt", vrtBuff);
+  if (access(vrtFile, F_OK) == 0)
+  {
+    return vrtFile;
+  }
+  return NULL;
 }
 
 void writeSingleVRT(int32_t nR, int32_t nA, dictNode *metaData, char *vrtFile, char *bandFiles[], char *bandNames[],
-                    GDALDataType dataTypes[], char *byteSwapOption, int32_t nBands)
+                    GDALDataType dataTypes[], char *byteSwapOption, double noDataValue, int32_t nBands)
 {
-    GDALRasterBandH hBand;
-    char fileOption[2048];
-    char fullPath[2048];
-    double geoTransform[6] = {-0.5, 1., 0., -0.5, 0., 1.};
-    int i, j;
-    fileOption[i] = '\0';
-    GDALDriverH vrtDriver = GDALGetDriverByName("VRT");
-    GDALDatasetH vrtDataset = GDALCreate(vrtDriver, vrtFile, nR, nA, 0, GDT_Unknown, NULL);
-    // Add the meta data                                
-    writeDataSetMetaData(vrtDataset, metaData);
-    // Add geo transform
-    GDALSetGeoTransform(vrtDataset, geoTransform);
-    // Loop through bands
-    for (i = 0; i < nBands; i++)
-    {
-        // Make a copy of the full bath so basename doesn't screw it up.
-        strcpy(fullPath, bandFiles[i]);
-        // Set SourceFilename (strip of dull path since its relative to VRT)
-        sprintf(fileOption, "SourceFilename=%s", basename(fullPath));
-        // Setup options
-        char *options[] = {fileOption, "relativeToVRT=1", "subclass=VRTRawRasterBand", byteSwapOption, NULL};
-        // Add the next band and set its options;
-        GDALAddBand(vrtDataset, dataTypes[i], options);
-        // Get the band handle
-        hBand = GDALGetRasterBand(vrtDataset, i + 1);
-        // Add a band description
-        GDALSetMetadataItem(hBand, "Description", (const char *) bandNames[i], NULL);
-    }
-    GDALClose(vrtDataset);
+  GDALRasterBandH hBand;
+  char fileOption[2048];
+  char fullPath[2048];
+  double geoTransform[6] = {-0.5, 1., 0., -0.5, 0., 1.};
+  int i, j;
+  fileOption[i] = '\0';
+  GDALDriverH vrtDriver = GDALGetDriverByName("VRT");
+  GDALDatasetH vrtDataset = GDALCreate(vrtDriver, vrtFile, nR, nA, 0, GDT_Unknown, NULL);
+  // Add the meta data
+  writeDataSetMetaData(vrtDataset, metaData);
+  // Add geo transform
+  GDALSetGeoTransform(vrtDataset, geoTransform);
+  // Loop through bands
+  for (i = 0; i < nBands; i++)
+  {
+    // Make a copy of the full bath so basename doesn't screw it up.
+    strcpy(fullPath, bandFiles[i]);
+    // Set SourceFilename (strip of dull path since its relative to VRT)
+    sprintf(fileOption, "SourceFilename=%s", basename(fullPath));
+    // Setup options
+    char *options[] = {fileOption, "relativeToVRT=1", "subclass=VRTRawRasterBand", byteSwapOption, NULL};
+    // Add the next band and set its options;
+    GDALAddBand(vrtDataset, dataTypes[i], options);
+    // Get the band handle
+    hBand = GDALGetRasterBand(vrtDataset, i + 1);
+    // Add a band description
+    GDALSetMetadataItem(hBand, "Description", (const char *)bandNames[i], NULL);
+    if(noDataValue != DONOTINCLUDENODATA)
+      GDALSetRasterNoDataValue(hBand, noDataValue);
+  }
+  GDALClose(vrtDataset);
 }
-
 
 int makeVRT(char *vrtFile, int xSize, int ySize, int dataType, char **bandNames, int nBands,
             double *geoTransform, int byteSwap, dictNode *metaData)
@@ -177,15 +177,15 @@ void *byteSwapData(void *buffer, int dataType, int64_t size)
   {
     correctedSize = size * 2;
   }
-  //fprintf(stderr, "%li \n", correctedSize);
-  // Now remap the data
+  // fprintf(stderr, "%li \n", correctedSize);
+  //  Now remap the data
   switch (dataType)
   {
   case GDT_Byte:
     break;
   case GDT_UInt16:
   case GDT_Int16:
-    //fprintf(stderr, "byteswap 2\n");
+    // fprintf(stderr, "byteswap 2\n");
     buffer2Byte = (uint16_t *)buffer;
     for (i = 0; i < size; i++)
       CPL_SWAP32PTR(&buffer2Byte[i]);
@@ -193,14 +193,14 @@ void *byteSwapData(void *buffer, int dataType, int64_t size)
   case GDT_Float32:
   case GDT_Int32:
   case GDT_UInt32:
-    //fprintf(stderr, "byteswap 4\n");
+    // fprintf(stderr, "byteswap 4\n");
     buffer4Byte = (uint32_t *)buffer;
     for (i = 0; i < size; i++)
       CPL_SWAP32PTR(&buffer4Byte[i]);
     break;
   case GDT_Float64:
   case GDT_CFloat64:
-    //fprintf(stderr, "byteswap 8\n");
+    // fprintf(stderr, "byteswap 8\n");
     buffer8Byte = (uint64_t *)buffer;
     for (i = 0; i < size; i++)
       CPL_SWAP64PTR(&buffer8Byte[i]);
@@ -262,14 +262,14 @@ void **readRasterVRT(char *fileName, int band, int *xSize, int *ySize, int *data
     fprintf(stderr, "readRasterVRT: Could not get raster band\n");
   // Data type
   *dataType = GDALGetRasterDataType(hBand);
-  //fprintf(stderr, "type %s %i\n", GDALGetDataTypeName(*dataType), *dataType);
+  // fprintf(stderr, "type %s %i\n", GDALGetDataTypeName(*dataType), *dataType);
   dataTypeSize = GDALGetDataTypeSize(*dataType) / 8;
-  //fprintf(stderr, "type size %i\n", dataTypeSize);
-  // Image size
+  // fprintf(stderr, "type size %i\n", dataTypeSize);
+  //  Image size
   *xSize = GDALGetRasterBandXSize(hBand);
   *ySize = GDALGetRasterBandYSize(hBand);
-  //fprintf(stderr, "size %i %i\n", *xSize, *ySize);
-  // Malloc data
+  // fprintf(stderr, "size %i %i\n", *xSize, *ySize);
+  //  Malloc data
   data = allocData(*dataType, *xSize, *ySize);
   // Read Data
   status = GDALRasterIO(hBand, GF_Read, 0, 0, *xSize, *ySize, data, *xSize, *ySize, *dataType, 0, 0);
@@ -285,10 +285,10 @@ append a suffix to a file name, use buff for space.
 */
 char *appendSuff(char *file, char *suffix, char *buf)
 {
-	char *datFile;
-	datFile = &(buf[0]);
-	buf[0] = '\0';
-	datFile = strcat(datFile, file);
-	datFile = strcat(datFile, suffix);
-	return datFile;
+  char *datFile;
+  datFile = &(buf[0]);
+  buf[0] = '\0';
+  datFile = strcat(datFile, file);
+  datFile = strcat(datFile, suffix);
+  return datFile;
 }
