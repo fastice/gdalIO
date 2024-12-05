@@ -54,6 +54,9 @@ int readDataSetMetaData(GDALDatasetH dataSet, dictNode **metaDictionary)
   char *key, *value;
   // GDALRasterBandH hBand = GDALGetRasterBand(dataSet, band);
   char **metadata = GDALGetMetadata(dataSet, NULL);
+  // If not meta data return.
+  if(metadata == NULL) return 0;
+  // Unpack meta data
   for (i = 0; metadata[i] != NULL; i++)
   {
     fprintf(stderr, "%s\n", metadata[i]);
