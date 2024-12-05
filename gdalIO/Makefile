@@ -5,6 +5,7 @@ OBJS =	gdalIO.o dictionaryCode.o
 
 USER =	$(shell id -u -n)
 MACHTYPE = $(shell uname -m)
+OSTYPE = $(shell uname -s)
 
 $(shell mkdir -p $(MACHTYPE)-$(OSTYPE))
 
