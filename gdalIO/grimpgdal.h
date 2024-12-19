@@ -1,10 +1,13 @@
+#ifndef GRIMPDAL_H
+#define GRIMPDAL_H
+
 #include <gdal.h>
 #include <gdal_vrt.h>
 #include <cpl_conv.h>
 #include <stdarg.h>
 #include <stdint.h>
 #include <string.h>
-
+// header contents
 #define DONOTINCLUDENODATA 1e30
 typedef struct dictNode {
     char *key;
@@ -38,3 +41,4 @@ int writeRasterAsVRT(void *buffer, char *fileName, int xSize, int ySize, int dat
 
 void **readRasterVRT(char *fileName, int band, int *xSize, int *ySize, int *dataType, dictNode **metaDictionary);
 char *appendSuff(char *file, char *suffix, char *buf);
+#endif

@@ -1,4 +1,4 @@
-#include "grimpgdal.h"
+#include "mosaicSource/common/common.h"
 
 dictNode* create_node(char *key, char *value) {
     dictNode *new_node = malloc(sizeof(dictNode));
