@@ -106,7 +106,7 @@ all: $(TARGETS)
 TESTIO =	test/$(MACHTYPE)-$(OSTYPE)/testio.o
 
 
-GDALIO = gdalIO/$(MACHTYPE)-$(OSTYPE)/gdalIO.o gdalIO/$(MACHTYPE)-$(OSTYPE)/dictionaryCode.o
+GDALIO = gdalIO/$(MACHTYPE)-$(OSTYPE)/gdalIO.o gdalIO/$(MACHTYPE)-$(OSTYPE)/dictionaryCode.o gdalIO/$(MACHTYPE)-$(OSTYPE)/tiffWriteCode.o
 IODIRS =	 gdalIO
 
 

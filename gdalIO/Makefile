@@ -1,7 +1,7 @@
 CC =		gcc
 CFLAGS =	$(FLAGS) -c -I$(INCLUDEPATH)
 
-OBJS =	gdalIO.o dictionaryCode.o
+OBJS =	gdalIO.o dictionaryCode.o tiffWriteCode.o
 
 USER =	$(shell id -u -n)
 MACHTYPE = $(shell uname -m)
