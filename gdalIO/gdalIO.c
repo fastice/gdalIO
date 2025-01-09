@@ -9,6 +9,18 @@
   __buf;                                                       \
 })
 
+
+void ifNEReturnCode(CPLErr returnCode, int code, char *msg, ...)
+{
+	if(returnCode == code) return;
+	va_list args;
+	va_start(args, msg);
+	error(msg, args);
+	va_end(args);
+	exit(1);
+}
+
+
 void *allocData(int data_type, int width, int height)
 {
   void *data = NULL;
@@ -17,17 +29,6 @@ void *allocData(int data_type, int width, int height)
   size = GDALGetDataTypeSize(data_type) / 8;
   fprintf(stderr, "Mallocing %i, %i, %i %i\n", width, height, (int)size, width * height * size);
   return CPLMalloc(width * height * size);
-}
-
-static void myError(char *msg, ...)
-{
-  va_list args;
-  va_start(args, msg);
-  fprintf(stderr, "Error **** ");
-  fprintf(stderr, msg, args);
-  fprintf(stderr, "**** \n");
-  va_end(args);
-  exit(-1);
 }
 
 char *parseNameValue(char *metaBuf, char **value)
@@ -131,6 +132,7 @@ void writeSingleVRT(int32_t nR, int32_t nA, dictNode *metaData, char *vrtFile, c
   GDALClose(vrtDataset);
 }
 
+
 int makeVRT(char *vrtFile, int xSize, int ySize, int dataType, char **bandNames, int nBands,
             double *geoTransform, int byteSwap, dictNode *metaData)
 {
@@ -209,7 +211,7 @@ void *byteSwapData(void *buffer, int dataType, int64_t size)
       CPL_SWAP64PTR(&buffer8Byte[i]);
     break;
   default:
-    myError("Invalid data type in byte swap %i", dataType);
+    error("Invalid data type in byte swap %i", dataType);
   }
   return buffer;
 }
@@ -221,13 +223,11 @@ int writeRasterAsVRT(void *buffer, char *fileName, int xSize, int ySize, int dat
   char *vrtFile, buf[2048];
   // Get the driver
   GDALDriverH driver = GDALGetDriverByName("ENVI");
-  if (driver == NULL)
-    myError("Error getting driver");
+  ifNullError(driver, "writeRasterAsVRT: Error getting driver");          
   // Opent the data set
   GDALDatasetH outputDataset = GDALCreate(driver, fileName, xSize, ySize,
-                                          band, dataType, NULL);
-  if (outputDataset == NULL)
-    myError("Error creating data set");
+                                        band, dataType, NULL);
+  ifNullError(outputDataset, "writeRasterAsVRT: Error creating data set");                                        
   // Get the first raster band
   GDALRasterBandH hBand = GDALGetRasterBand(outputDataset, band);
   // Write the data
@@ -235,9 +235,7 @@ int writeRasterAsVRT(void *buffer, char *fileName, int xSize, int ySize, int dat
     buffer = byteSwapData(buffer, dataType, xSize * ySize);
   CPLErr eErr = GDALRasterIO(hBand, GF_Write, 0, 0, xSize, ySize,
                              buffer, xSize, ySize, dataType, 0, 0);
-
-  if (eErr != CE_None)
-    myError("Failed to write raster data\n");
+  ifNEReturnCode(eErr,  CE_None, "writeRasterAsVRT: Failed to write raster data\n");
   //, geoTransform, byteSwap
   fprintf(stderr, "Making vrt...\n");
   vrtFile = appendSuff(fileName, ".vrt", buf);
@@ -257,7 +255,7 @@ void **readRasterVRT(char *fileName, int band, int *xSize, int *ySize, int *data
   GDALDatasetH hDS = GDALOpen(fileName, GDAL_OF_READONLY);
   nbands = GDALGetRasterCount(hDS);
   if (band < 1 || band > nbands)
-    myError("readRasterVRT: Invalid band %i", band);
+    error("readRasterVRT: Invalid band %i", band);
   // Get the band metadata.
   fprintf(stderr, "BAND %i\n\n", band);
   GDALRasterBandH hBand = GDALGetRasterBand(hDS, band);
@@ -278,8 +276,7 @@ void **readRasterVRT(char *fileName, int band, int *xSize, int *ySize, int *data
   status = GDALRasterIO(hBand, GF_Read, 0, 0, *xSize, *ySize, data, *xSize, *ySize, *dataType, 0, 0);
   readDataSetMetaData(hDS, metaDictionary);
   // fprintf(stderr, "read  %10.f %10.f \n", x[5], x[(300 * (*xSize) + 200)]);
-  if (status != CE_None)
-    myError("Could not read band data\n");
+  ifNEReturnCode(status,  CE_None, "readRasterVRT: Could not read band data\n");
   return data;
 }
 
