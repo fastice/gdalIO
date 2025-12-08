@@ -40,7 +40,7 @@ void *byteSwapData(void *buffer, int dataType, int64_t size);
 int writeRasterAsVRT(void *buffer, char *fileName, int xSize, int ySize, int dataType,
                      int band, double *geoTransform, int byteSwap, dictNode *metaData);
 
-void **readRasterVRT(char *fileName, int band, int *xSize, int *ySize, int *dataType, dictNode **metaDictionary);
+void **readRasterVRT(char *fileName, int band, int *xSize, int *ySize, int *dataType, dictNode **metaDictionary, void *data);
 char *appendSuff(char *file, char *suffix, char *buf);
 void saveAsGeotiff(const char *filename, void *data, int32_t width, int32_t height, double *geotransform,
                    const char *epsg_code, dictNode *metaData, char *driverType, int32_t dataType, float noDataValue);

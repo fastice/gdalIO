@@ -118,7 +118,17 @@ io:
 			cd $(PROGDIR); \
 		); done
 
+TESTIODIRS =	test $(PROGDIR)/gdalIO/gdalIO  
 
-
+testio:
+	@for i in ${TESTIODIRS}; do \
+		( 	echo "<<< Descending in directory: $$i >>>"; \
+	                cd $$i; \
+			make FLAGS=$(CCFLAGS) INCLUDEPATH=$(INCLUDEPATH) PAF=0; \
+			cd $(PROGDIR); \
+		); done
+		g++ $(MEM) $(CCFLAGS1) $(NOPIE) \
+                $(TESTIO) $(GDALIO)  $(STANDARD) \
+				-lm  $(GDAL) -o $(BINDIR)/testio  -L/usr/lib 	
 
 

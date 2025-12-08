@@ -60,7 +60,7 @@ int readDataSetMetaData(GDALDatasetH dataSet, dictNode **metaDictionary)
   // Unpack meta data
   for (i = 0; metadata[i] != NULL; i++)
   {
-    fprintf(stderr, "%s\n", metadata[i]);
+    //fprintf(stderr, "%s\n", metadata[i]);
     key = parseNameValue(metadata[i], &value);
     // fprintf(stderr, "key %s value %s\n", key, value);
     insert_node(metaDictionary, key, value);
@@ -88,6 +88,7 @@ char *extract_filename(char *path)
 char *checkForVrt(char *filename, char *vrtBuff)
 {
   char *vrtFile;
+  vrtBuff[0] = '\0';
   vrtFile = appendSuffix(filename, ".vrt", vrtBuff);
   if (access(vrtFile, F_OK) == 0)
   {
@@ -245,11 +246,11 @@ int writeRasterAsVRT(void *buffer, char *fileName, int xSize, int ySize, int dat
   // Now make a vrt file for data set.
 }
 
-void **readRasterVRT(char *fileName, int band, int *xSize, int *ySize, int *dataType, dictNode **metaDictionary)
+void **readRasterVRT(char *fileName, int band, int *xSize, int *ySize, int *dataType, dictNode **metaDictionary, void *data)
 {
   int nbands, i;
   int dataTypeSize, status;
-  void *data;
+  //void *data;
   // Open Data set and check valid band requested
   fprintf(stderr, "Reading %s\n", fileName);
   GDALDatasetH hDS = GDALOpen(fileName, GDAL_OF_READONLY);
@@ -271,12 +272,24 @@ void **readRasterVRT(char *fileName, int band, int *xSize, int *ySize, int *data
   *ySize = GDALGetRasterBandYSize(hBand);
   // fprintf(stderr, "size %i %i\n", *xSize, *ySize);
   //  Malloc data
-  data = allocData(*dataType, *xSize, *ySize);
+  if(data == NULL)
+  {
+    fprintf(stderr, "MALLOC readRasterVRTbuffer");
+    data = allocData(*dataType, *xSize, *ySize);  
+  } 
+  else
+  { 
+    fprintf(stderr, "USing previously malloced space");
+  }
+
   // Read Data
   status = GDALRasterIO(hBand, GF_Read, 0, 0, *xSize, *ySize, data, *xSize, *ySize, *dataType, 0, 0);
-  readDataSetMetaData(hDS, metaDictionary);
+  //readDataSetMetaData(hDS, metaDictionary);
   // fprintf(stderr, "read  %10.f %10.f \n", x[5], x[(300 * (*xSize) + 200)]);
   ifNEReturnCode(status,  CE_None, "readRasterVRT: Could not read band data\n");
+  // close dataset after you are done with metadata and raster IO
+  GDALClose(hDS);
+
   return data;
 }
 
