@@ -35,12 +35,14 @@ int makeTiffVRT(char *vrtFile, const char **bands, int nBands, float *noDataValu
 int makeVRT(char *vrtFile, int xSize, int ySize, int dataType, char **bandNames, int nBands,
             double *geoTransform, int byteSwap, dictNode *metaData);
 char *checkForVrt(char *filename, char *vrtBuff);
+int has_suffix(const char *str, const char *suffix);
+char *extract_filename(char *path);
 void *byteSwapData(void *buffer, int dataType, int64_t size);
 
 int writeRasterAsVRT(void *buffer, char *fileName, int xSize, int ySize, int dataType,
                      int band, double *geoTransform, int byteSwap, dictNode *metaData);
 
-void **readRasterVRT(char *fileName, int band, int *xSize, int *ySize, int *dataType, dictNode **metaDictionary, void *data);
+void **readRasterVRT(char *fileName, int band, int *xSize, int *ySize, int *dataType, dictNode **metaDictionary, void *data, int32_t yMin, int32_t yMax);
 char *appendSuff(char *file, char *suffix, char *buf);
 void saveAsGeotiff(const char *filename, void *data, int32_t width, int32_t height, double *geotransform,
                    const char *epsg_code, dictNode *metaData, char *driverType, int32_t dataType, float noDataValue);

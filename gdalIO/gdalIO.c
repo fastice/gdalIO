@@ -60,10 +60,13 @@ int readDataSetMetaData(GDALDatasetH dataSet, dictNode **metaDictionary)
   // Unpack meta data
   for (i = 0; metadata[i] != NULL; i++)
   {
-    //fprintf(stderr, "%s\n", metadata[i]);
-    key = parseNameValue(metadata[i], &value);
-    // fprintf(stderr, "key %s value %s\n", key, value);
+    char *copy = strdup(metadata[i]);   // copy before parsing
+    key = parseNameValue(copy, &value);
     insert_node(metaDictionary, key, value);
+    //fprintf(stderr, "%s\n", metadata[i]);
+    //key = parseNameValue(metadata[i], &value);
+    // fprintf(stderr, "key %s value %s\n", key, value);
+    //insert_node(metaDictionary, key, value);
   }
 }
 
@@ -85,10 +88,34 @@ char *extract_filename(char *path)
   return filename;
 }
 
+
+
+int has_suffix(const char *str, const char *suffix) {
+    size_t str_len = strlen(str);
+    size_t suffix_len = strlen(suffix);
+
+    /* If the suffix is longer than the string, it can't be a match */
+    if (suffix_len > str_len) {
+        return 0;
+    }
+
+    /* Compare the end of str with suffix */
+    /* We move the str pointer forward to the starting point of the potential match */
+    return strcmp(str + str_len - suffix_len, suffix) == 0;
+}
+
 char *checkForVrt(char *filename, char *vrtBuff)
 {
   char *vrtFile;
+  size_t len;
   vrtBuff[0] = '\0';
+  /* If the filename itself ends in .vrt, check it directly first */
+  len = strlen(filename);
+  if (len >= 4 && strcmp(filename + len - 4, ".vrt") == 0) {
+    strcpy(vrtBuff, filename);
+    if (access(vrtBuff, F_OK) == 0)
+      return vrtBuff;
+  }
   vrtFile = appendSuffix(filename, ".vrt", vrtBuff);
   if (access(vrtFile, F_OK) == 0)
   {
@@ -246,48 +273,58 @@ int writeRasterAsVRT(void *buffer, char *fileName, int xSize, int ySize, int dat
   // Now make a vrt file for data set.
 }
 
-void **readRasterVRT(char *fileName, int band, int *xSize, int *ySize, int *dataType, dictNode **metaDictionary, void *data)
+void **readRasterVRT(char *fileName, int band, int *xSize, int *ySize, int *dataType, dictNode **metaDictionary, void *data, int32_t yMin, int32_t yMax)
 {
-  int nbands, i;
+  int nbands;
   int dataTypeSize, status;
-  //void *data;
-  // Open Data set and check valid band requested
-  fprintf(stderr, "Reading %s\n", fileName);
+  int32_t iYMin, iYMax, nRows;
+  int64_t k, nPix;
+  float *fData;
+
   GDALDatasetH hDS = GDALOpen(fileName, GDAL_OF_READONLY);
   nbands = GDALGetRasterCount(hDS);
   if (band < 1 || band > nbands)
     error("readRasterVRT: Invalid band %i", band);
-  // Get the band metadata.
-  fprintf(stderr, "BAND %i\n\n", band);
   GDALRasterBandH hBand = GDALGetRasterBand(hDS, band);
   if (hBand == NULL)
     fprintf(stderr, "readRasterVRT: Could not get raster band\n");
-  // Data type
   *dataType = GDALGetRasterDataType(hBand);
-  // fprintf(stderr, "type %s %i\n", GDALGetDataTypeName(*dataType), *dataType);
   dataTypeSize = GDALGetDataTypeSize(*dataType) / 8;
-  // fprintf(stderr, "type size %i\n", dataTypeSize);
-  //  Image size
   *xSize = GDALGetRasterBandXSize(hBand);
   *ySize = GDALGetRasterBandYSize(hBand);
-  // fprintf(stderr, "size %i %i\n", *xSize, *ySize);
-  //  Malloc data
+
   if(data == NULL)
   {
-    fprintf(stderr, "MALLOC readRasterVRTbuffer");
-    data = allocData(*dataType, *xSize, *ySize);  
-  } 
+    fprintf(stderr, "MALLOC readRasterVRT buffer");
+    data = allocData(*dataType, *xSize, *ySize);
+  }
   else
-  { 
-    fprintf(stderr, "USing previously malloced space");
+  {
+    fprintf(stderr, "Using previously malloced space"); 
   }
 
-  // Read Data
-  status = GDALRasterIO(hBand, GF_Read, 0, 0, *xSize, *ySize, data, *xSize, *ySize, *dataType, 0, 0);
-  //readDataSetMetaData(hDS, metaDictionary);
-  // fprintf(stderr, "read  %10.f %10.f \n", x[5], x[(300 * (*xSize) + 200)]);
-  ifNEReturnCode(status,  CE_None, "readRasterVRT: Could not read band data\n");
-  // close dataset after you are done with metadata and raster IO
+  /* Clamp row range to valid extent */
+  iYMin = (yMin < 0) ? 0 : yMin;
+  iYMax = (yMax >= *ySize) ? *ySize - 1 : yMax;
+  nRows = iYMax - iYMin + 1;
+
+  /* Fill entire buffer with -LARGEINT sentinel (assumes GDT_Float32) */
+  nPix = (int64_t)(*xSize) * (*ySize);
+  fData = (float *)data;
+  for (k = 0; k < nPix; k++)
+    fData[k] = (float)-LARGEINT;
+
+  /* Read only the requested rows in-place so indices match a full read */
+  if(iYMin == 0 && iYMax == *ySize - 1)
+    fprintf(stderr, "\033[32m\nFull read of %i rows and %i columns\033[0m\n", *ySize, *xSize);
+  else
+    fprintf(stderr, "\033[34m\nPartial read of rows %i to %i (of %i) and %i columns\033[0m\n", iYMin, iYMax, *ySize, *xSize);
+  
+
+  status = GDALRasterIO(hBand, GF_Read, 0, iYMin, *xSize, nRows,
+                        (char *)data + (int64_t)iYMin * (*xSize) * dataTypeSize,
+                        *xSize, nRows, *dataType, 0, 0);
+  ifNEReturnCode(status, CE_None, "readRasterVRT: Could not read band data\n");
   GDALClose(hDS);
 
   return data;

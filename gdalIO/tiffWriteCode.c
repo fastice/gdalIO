@@ -1,6 +1,8 @@
 #include "gdal.h"
 #include "ogr_srs_api.h"
 #include <sys/types.h>
+#include <stdio.h>
+#include <libgen.h>
 #include "gdalIO/gdalIO/grimpgdal.h"
 #include "mosaicSource/common/common.h"
 
@@ -228,35 +230,53 @@ static void setBandDescriptionAndNoData(GDALDatasetH vrtDataset, const char *fil
 
 int makeTiffVRT(char *vrtFile, const char **bands, int nBands, float *noDataValues, dictNode *metaData)
 {
-    // Create GDALBuildVRT options
-    char *papszOptions[] = {
-        "-separate",
-        NULL // Array must be NULL-terminated
-    };
-    GDALBuildVRTOptions *psOptions = GDALBuildVRTOptionsNew(papszOptions, NULL);
-    ifNullError(psOptions, "Failed to create GDALBuildVRTOptions\n");
-    // Open each band file
+    // Open each band file to get size/type/geotransform
     GDALDatasetH *pahInputDatasets = (GDALDatasetH *)CPLMalloc(sizeof(GDALDatasetH) * nBands);
-    
     for (int i = 0; i < nBands; i++)
     {
         pahInputDatasets[i] = GDALOpen(bands[i], GA_ReadOnly);
         ifNullError(pahInputDatasets[i], "Failed to open input file: %s\n", bands[i]);
     }
-    // Build VRT
-    GDALDatasetH vrtDataset = GDALBuildVRT(vrtFile, nBands, pahInputDatasets, bands, psOptions, NULL);
-    
-    // Add the suffix of the file name the description
-    for (int i = 1; i <= nBands; i++)
-    {
-        setBandDescriptionAndNoData(vrtDataset, bands[i - 1], i, noDataValues[i - 1]);
-    }
+    int width = GDALGetRasterXSize(pahInputDatasets[0]);
+    int height = GDALGetRasterYSize(pahInputDatasets[0]);
+    GDALDataType dataType = GDALGetRasterDataType(GDALGetRasterBand(pahInputDatasets[0], 1));
+    double geoTransform[6];
+    GDALGetGeoTransform(pahInputDatasets[0], geoTransform);
+
+    // Build the VRT by hand instead of via GDALBuildVRT: GDALBuildVRT
+    // rejects rasters with "positive NS resolution" (GT[5] > 0), which is
+    // the pixel-coord convention used for radar-geometry tiffs (e.g.
+    // writeFlatTiff's .lat.tif/.lon.tif in simInSAR). The geotransform is
+    // copied as-is from the first input band, so this works unchanged for
+    // geographic-coord tiffs too (GT[5] < 0, e.g. mosaic3d/geomosaic's
+    // saveAsGeotiff outputs) -- this function is convention-agnostic, it
+    // just mirrors whatever geotransform the input tiffs already carry.
+    // Each band's source is injected via the VRT driver's
+    // "new_vrt_sources" metadata domain.
+    GDALDriverH vrtDriver = GDALGetDriverByName("VRT");
+    GDALDatasetH vrtDataset = GDALCreate(vrtDriver, vrtFile, width, height, 0, GDT_Unknown, NULL);
+    ifNullError(vrtDataset, "Failed to create VRT %s\n", vrtFile);
+    GDALSetGeoTransform(vrtDataset, geoTransform);
     // Add the meta data
     writeDataSetMetaData(vrtDataset, metaData);
-    // Check that it worked
-    if (vrtDataset == NULL)
+
+    for (int i = 0; i < nBands; i++)
     {
-        error("GDALBuildVRT failed\n");
+        GDALAddBand(vrtDataset, dataType, NULL);
+        setBandDescriptionAndNoData(vrtDataset, bands[i], i + 1, noDataValues[i]);
+        GDALRasterBandH band = GDALGetRasterBand(vrtDataset, i + 1);
+        char pathBuf[2048], sourceXml[2560];
+        strncpy(pathBuf, bands[i], sizeof(pathBuf) - 1);
+        pathBuf[sizeof(pathBuf) - 1] = '\0';
+        snprintf(sourceXml, sizeof(sourceXml),
+                 "<SimpleSource>"
+                 "<SourceFilename relativeToVRT=\"1\">%s</SourceFilename>"
+                 "<SourceBand>1</SourceBand>"
+                 "<SrcRect xOff=\"0\" yOff=\"0\" xSize=\"%d\" ySize=\"%d\"/>"
+                 "<DstRect xOff=\"0\" yOff=\"0\" xSize=\"%d\" ySize=\"%d\"/>"
+                 "</SimpleSource>",
+                 basename(pathBuf), width, height, width, height);
+        GDALSetMetadataItem(band, "source_0", sourceXml, "new_vrt_sources");
     }
     // Save the VRT dataset to disk
     GDALClose(vrtDataset);
@@ -266,8 +286,4 @@ int makeTiffVRT(char *vrtFile, const char **bands, int nBands, float *noDataValu
         GDALClose(pahInputDatasets[i]);
     }
     CPLFree(pahInputDatasets);
-    // Free options
-    GDALBuildVRTOptionsFree(psOptions);
-    // Cleanup
-    GDALDestroyDriverManager();
 }

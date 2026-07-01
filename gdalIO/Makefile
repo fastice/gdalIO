@@ -1,14 +1,22 @@
 CC =		gcc
-CFLAGS =	$(FLAGS) -c -I$(INCLUDEPATH)
+MACHTYPE =	$(shell uname -m)
+OSTYPE =	$(shell uname -s)
+OBJDIR =	$(MACHTYPE)-$(OSTYPE)
 
-OBJS =	gdalIO.o dictionaryCode.o tiffWriteCode.o
+$(shell mkdir -p $(OBJDIR))
 
-USER =	$(shell id -u -n)
-MACHTYPE = $(shell uname -m)
-OSTYPE = $(shell uname -s)
+CFLAGS =	$(FLAGS) -c -I$(INCLUDEPATH) -MMD -MP
 
-$(shell mkdir -p $(MACHTYPE)-$(OSTYPE))
+SRCS =	gdalIO.c dictionaryCode.c tiffWriteCode.c
+
+OBJS =	$(SRCS:%.c=$(OBJDIR)/%.o)
 
 all:	$(OBJS)
-	mv *.o $(MACHTYPE)-$(OSTYPE)
+
+-include $(OBJS:.o=.d)
+
 .KEEP_STATE:
+
+
+$(OBJDIR)/%.o: %.c
+	$(CC) $(CFLAGS) $< -o $@
