@@ -29,6 +29,14 @@ static GDALDatasetH getDataSetForDriver(char *driverType, const char *filename, 
         const char *options[] = {
             "COMPRESS=DEFLATE",  // Compression for efficient storage
             "BIGTIFF=IF_NEEDED", // Ensure compatibility with large datasets
+            /* Without this GDAL sizes a strip at ~8 KB, which for a typical
+               Landsat cull row (1559 float32 = 6.2 KB) is ONE row per strip.
+               Every consumer reads these whole and sequentially, so that turns
+               one image into ~1500 4 KB reads; on a rotational disk with 30
+               mosaics running it is pure seek and the disk saturates on IOPS
+               at 13 MB/s. 256 rows cuts the reads per image ~83x (measured
+               2403 -> 29 syscalls) at identical file size. */
+            "BLOCKYSIZE=256",
             NULL};
         GDALDatasetH dataset = GDALCreate(driver, filename, width, height, 1, dataType, (char **)options);
         ifNullError(dataset, "GDAL: Failed to create dataset for %s with driver %s\n", filename, driverType);
@@ -216,9 +224,13 @@ static const char *getSuffixBeforeTif(const char *filename)
     return suffix;
 }
 
-static void setBandDescriptionAndNoData(GDALDatasetH vrtDataset, const char *filename, int bandIndex, float noDataValue)
+static void setBandDescriptionAndNoData(GDALDatasetH vrtDataset, const char *filename, const char *bandName,
+                                        int bandIndex, float noDataValue)
 {
-    const char *description = getSuffixBeforeTif(filename);
+    /* bandName, when given, overrides the filename-derived name -- needed where the tif's
+       file suffix and the band name the consumers expect differ in case or spelling
+       (e.g. simInSAR's <root>.mask.tif, whose band the raw path names "Mask"). */
+    const char *description = (bandName != NULL) ? bandName : getSuffixBeforeTif(filename);
     GDALRasterBandH band = GDALGetRasterBand(vrtDataset, bandIndex);
     ifNullError(band,"Failed to get band %d\n", bandIndex);
     // Set the "Description" metadata for the band
@@ -229,6 +241,12 @@ static void setBandDescriptionAndNoData(GDALDatasetH vrtDataset, const char *fil
 }
 
 int makeTiffVRT(char *vrtFile, const char **bands, int nBands, float *noDataValues, dictNode *metaData)
+{
+    return makeTiffVRTNamed(vrtFile, bands, NULL, nBands, noDataValues, metaData);
+}
+
+int makeTiffVRTNamed(char *vrtFile, const char **bands, const char **bandNames, int nBands,
+                     float *noDataValues, dictNode *metaData)
 {
     // Open each band file to get size/type/geotransform
     GDALDatasetH *pahInputDatasets = (GDALDatasetH *)CPLMalloc(sizeof(GDALDatasetH) * nBands);
@@ -263,7 +281,8 @@ int makeTiffVRT(char *vrtFile, const char **bands, int nBands, float *noDataValu
     for (int i = 0; i < nBands; i++)
     {
         GDALAddBand(vrtDataset, dataType, NULL);
-        setBandDescriptionAndNoData(vrtDataset, bands[i], i + 1, noDataValues[i]);
+        setBandDescriptionAndNoData(vrtDataset, bands[i], (bandNames != NULL) ? bandNames[i] : NULL,
+                                    i + 1, noDataValues[i]);
         GDALRasterBandH band = GDALGetRasterBand(vrtDataset, i + 1);
         char pathBuf[2048], sourceXml[2560];
         strncpy(pathBuf, bands[i], sizeof(pathBuf) - 1);

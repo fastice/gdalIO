@@ -31,7 +31,10 @@ int writeDataSetMetaData(GDALDatasetH dataSet, dictNode *metaData);
 int readDataSetMetaData(GDALDatasetH dataSet, dictNode **metaDict);
 void writeSingleVRT(int32_t nR, int32_t nA, dictNode *metaData, char *vrtFile, char *bandFiles[], char *bandNames[],
                     GDALDataType dataTypes[], char *byteSwapOption, double noDataValue, int32_t nBands);
+void writeFlatTiff(const char *filename, const void *flatData, int32_t width, int32_t height, GDALDataType dataType, float noDataValue, dictNode *metaData);
 int makeTiffVRT(char *vrtFile, const char **bands, int nBands, float *noDataValues, dictNode *metaData);
+int makeTiffVRTNamed(char *vrtFile, const char **bands, const char **bandNames, int nBands,
+                     float *noDataValues, dictNode *metaData);
 int makeVRT(char *vrtFile, int xSize, int ySize, int dataType, char **bandNames, int nBands,
             double *geoTransform, int byteSwap, dictNode *metaData);
 char *checkForVrt(char *filename, char *vrtBuff);

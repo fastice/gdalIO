@@ -39,6 +39,33 @@ char *parseNameValue(char *metaBuf, char **value)
   return key;
 }
 
+/* Write a flat row-major buffer to GeoTIFF with pixel-coord geotransform.
+   No vertical flip: row 0 of the buffer becomes the top row of the tif.
+   This matches the convention used by writeSingleVRT and other GrIMP tiff
+   outputs (GT y-step = +1). makeTiffVRT builds the .vrt by hand (not via
+   GDALBuildVRT, which rejects "positive NS resolution" rasters), so this
+   convention is fine here. */
+void writeFlatTiff(const char *filename, const void *flatData,
+                   int32_t width, int32_t height, GDALDataType dataType,
+                   float noDataValue, dictNode *metaData)
+{
+  double pixGT[6] = {-0.5, 1., 0., -0.5, 0., 1.};
+  /* BLOCKYSIZE: GDAL's default strip is ~8 KB, i.e. a single row for most
+     GrIMP rasters, which makes a sequential read of one image thousands of
+     4 KB reads. See the note in tiffWriteCode.c. */
+  const char *options[] = {"COMPRESS=DEFLATE", "BLOCKYSIZE=256", NULL};
+  GDALDriverH driver = GDALGetDriverByName("GTiff");
+  GDALDatasetH ds = GDALCreate(driver, filename, width, height, 1, dataType, (char **)options);
+  GDALRasterBandH band;
+  GDALSetGeoTransform(ds, pixGT);
+  band = GDALGetRasterBand(ds, 1);
+  GDALSetRasterNoDataValue(band, noDataValue);
+  GDALRasterIO(band, GF_Write, 0, 0, width, height, (void *)flatData, width, height, dataType, 0, 0);
+  if (metaData != NULL)
+    writeDataSetMetaData(ds, metaData);
+  GDALClose(ds);
+}
+
 int writeDataSetMetaData(GDALDatasetH dataSet, dictNode *metaData)
 {
   dictNode *current;

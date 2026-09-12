@@ -1,0 +1,15 @@
+<VRTDataset rasterXSize="500" rasterYSize="600">
+  <GeoTransform>  0.0000000000000000e+00,  1.0000000000000000e+00,  0.0000000000000000e+00,  0.0000000000000000e+00,  0.0000000000000000e+00,  1.0000000000000000e+00</GeoTransform>
+  <VRTRasterBand dataType="UInt16" band="1" blockYSize="1" subClass="VRTRawRasterBand">
+    <Metadata>
+      <MDI key="AAA">XYZ</MDI>
+      <MDI key="BBB">234</MDI>
+      <MDI key="CCC">89</MDI>
+    </Metadata>
+    <SourceFilename relativeToVRT="1">myTestData</SourceFilename>
+    <ImageOffset>0</ImageOffset>
+    <PixelOffset>2</PixelOffset>
+    <LineOffset>1000</LineOffset>
+    <ByteOrder>LSB</ByteOrder>
+  </VRTRasterBand>
+</VRTDataset>
