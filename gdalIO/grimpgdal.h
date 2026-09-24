@@ -49,6 +49,9 @@ void **readRasterVRT(char *fileName, int band, int *xSize, int *ySize, int *data
 char *appendSuff(char *file, char *suffix, char *buf);
 void saveAsGeotiff(const char *filename, void *data, int32_t width, int32_t height, double *geotransform,
                    const char *epsg_code, dictNode *metaData, char *driverType, int32_t dataType, float noDataValue);
+void saveAsGeotiffScaled(const char *filename, void *data, int32_t width, int32_t height, double *geotransform,
+                         const char *epsg_code, dictNode *metaData, char *driverType, int32_t dataType,
+                         float noDataValue, double scale, double offset);
 char *timeStampMeta();                 
 void computeGeoTransform(double geoTransform[6], double x0, double y0, int32_t xSize, int32_t ySize, double deltaX, double deltaY);
 const char *getEPSGFromProjectionParams(double rot, double slat, int32_t hemisphere);

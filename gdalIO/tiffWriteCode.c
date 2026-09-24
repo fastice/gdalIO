@@ -9,7 +9,7 @@
 
 // Get a gdal data set for a given driver type. 
 static GDALDatasetH getDataSetForDriver(char *driverType, const char *filename, void *data,
-                                        int32_t width, int32_t height, int dataType)
+                                        int32_t width, int32_t height, int dataType, int32_t predictor)
 {
     // Get the requested triver
     GDALDriverH driver = GDALGetDriverByName(driverType);
@@ -37,7 +37,12 @@ static GDALDatasetH getDataSetForDriver(char *driverType, const char *filename, 
                at 13 MB/s. 256 rows cuts the reads per image ~83x (measured
                2403 -> 29 syscalls) at identical file size. */
             "BLOCKYSIZE=256",
+            NULL,                /* PREDICTOR=2 slot, used for scaled integer output */
             NULL};
+        if (predictor)
+        {
+            options[3] = "PREDICTOR=2";
+        }
         GDALDatasetH dataset = GDALCreate(driver, filename, width, height, 1, dataType, (char **)options);
         ifNullError(dataset, "GDAL: Failed to create dataset for %s with driver %s\n", filename, driverType);
         return dataset;
@@ -69,16 +74,29 @@ static void flip_data_vertically(void *data, int width, int height, GDALDataType
 void saveAsGeotiff(const char *filename, void *data, int32_t width, int32_t height, double *geotransform,
                    const char *epsg_code, dictNode *metaData, char *driverType, int32_t dataType, float noDataValue)
 {
+    saveAsGeotiffScaled(filename, data, width, height, geotransform, epsg_code, metaData, driverType, dataType,
+                        noDataValue, 1.0, 0.0);
+}
+
+// As saveAsGeotiff, but also records a band scale and offset (value = offset + scale * stored), e.g. for
+// integer-packed floats. With scale 1 and offset 0 nothing is written, so the output is as before.
+void saveAsGeotiffScaled(const char *filename, void *data, int32_t width, int32_t height, double *geotransform,
+                         const char *epsg_code, dictNode *metaData, char *driverType, int32_t dataType,
+                         float noDataValue, double scale, double offset)
+{
     GDALDatasetH dataset;
+    /* Horizontal-differencing predictor only for scaled (integer-packed) output, so every existing
+       caller's files are unchanged. It roughly halves Int16 dB*100 mosaics. */
+    int32_t scaled = (scale != 1.0 || offset != 0.0);
     //
     // Get the data set
     if (strcmp(driverType, "COG") == 0)
     {
-        dataset = getDataSetForDriver("MEM", "", data, width, height, dataType);
+        dataset = getDataSetForDriver("MEM", "", data, width, height, dataType, FALSE);
     }
     else
     {
-        dataset = getDataSetForDriver(driverType, filename, data, width, height, dataType);
+        dataset = getDataSetForDriver(driverType, filename, data, width, height, dataType, scaled);
     }
     //
     // Set geotransform
@@ -104,6 +122,11 @@ void saveAsGeotiff(const char *filename, void *data, int32_t width, int32_t heig
     ifNullError(band, "Failed to get raster band.\n");
     // Get set the nod data value
     GDALSetRasterNoDataValue(band, noDataValue);
+    if (scale != 1.0 || offset != 0.0)
+    {
+        GDALSetRasterScale(band, scale);
+        GDALSetRasterOffset(band, offset);
+    }
     // flip vertically for tiff output
     flip_data_vertically(data, width, height, dataType);
     // Write the raster bands
@@ -127,7 +150,12 @@ void saveAsGeotiff(const char *filename, void *data, int32_t width, int32_t heig
             "BIGTIFF=IF_NEEDED",
             "BLOCKSIZE=512",
             "OVERVIEWS=AUTO",
+            NULL,                /* PREDICTOR=YES slot, used for scaled integer output */
             NULL};
+        if (scaled)
+        {
+            options[4] = "PREDICTOR=YES";
+        }
         GDALDriverH cogDriver = GDALGetDriverByName(driverType);
         GDALDatasetH cogDataset = GDALCreateCopy(cogDriver, filename, dataset, FALSE, (char **)options, NULL, NULL);
         ifNullError(cogDataset, "Error: Failed to create COG dataset.\n");
