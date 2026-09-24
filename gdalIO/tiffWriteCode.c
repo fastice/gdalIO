@@ -2,6 +2,7 @@
 #include "ogr_srs_api.h"
 #include <sys/types.h>
 #include <stdio.h>
+#include <string.h>
 #include <libgen.h>
 #include "gdalIO/gdalIO/grimpgdal.h"
 #include "mosaicSource/common/common.h"
@@ -102,19 +103,30 @@ void saveAsGeotiffScaled(const char *filename, void *data, int32_t width, int32_
     // Set geotransform
     CPLErr returnCode  = GDALSetGeoTransform(dataset, geotransform);
     ifNEReturnCode(returnCode,  CE_None, "GDAL: Failed to set geotransform for filename %s\n", filename);
-    // Set projection using EPSG code
+    // Set projection.  OSRSetFromUserInput accepts "EPSG:nnnnn", a proj string or WKT,
+    // so a projection with no EPSG code (e.g. a custom polar stereographic) can be
+    // written too.  Callers have always passed a bare code such as "3413", which
+    // OSRSetFromUserInput does not accept, so promote all-digit strings to "EPSG:...".
+    // The previous version called OSRImportFromEPSG and, on failure, printed
+    // "trying wkt" and then set no projection at all -- silently producing a file with
+    // no CRS.  That is now a hard error.
     OGRSpatialReferenceH srs = OSRNewSpatialReference(NULL);
-    if (OSRImportFromEPSG(srs, atoi(epsg_code)) != OGRERR_NONE)
+    char srsBuf[256];
+    const char *srsInput = epsg_code;
+    if (epsg_code != NULL && epsg_code[0] != '\0' && strspn(epsg_code, "0123456789") == strlen(epsg_code))
     {
-        fprintf(stderr, "Failed to import EPSG code, trying wkt.\n");
+        snprintf(srsBuf, sizeof(srsBuf), "EPSG:%s", epsg_code);
+        srsInput = srsBuf;
     }
-    else
+    if (srsInput == NULL || OSRSetFromUserInput(srs, srsInput) != OGRERR_NONE)
     {
-        char *wkt = NULL;
-        OSRExportToWkt(srs, &wkt);
-        GDALSetProjection(dataset, wkt);
-        CPLFree(wkt);
+        error("saveAsGeotiff: could not interpret projection \"%s\" for %s",
+              (epsg_code == NULL) ? "(null)" : epsg_code, filename);
     }
+    char *wkt = NULL;
+    OSRExportToWkt(srs, &wkt);
+    GDALSetProjection(dataset, wkt);
+    CPLFree(wkt);
     OSRDestroySpatialReference(srs);
     //
     // Write data to the raster band
@@ -204,7 +216,11 @@ const char *getEPSGFromProjectionParams(double rot, double slat, int32_t hemisph
     {
         return "3031";
     }
-    error("Could not determine epgs from rot=%lf slat=%lf hemisphere=%i");
+    /* The format string used to have no arguments, so this message printed stack
+       garbage -- which is how a custom polar stereographic (e.g. the Taku
+       lat_ts=58/lon_0=-134 grid) reported itself. */
+    error("Could not determine epsg from rot=%lf slat=%lf hemisphere=%i", rot, slat, hemisphere);
+    return NULL;
 }
 
 static const char *getFileSuffix(const char *filename)
